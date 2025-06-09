@@ -1,0 +1,11 @@
+[build]
+  command = "npm run build"
+  publish = ".next"
+  functions = ".next/server"
+
+[build.environment]
+  NODE_VERSION = "20" # Match your local version
+  PRISMA_SKIP_POSTINSTALL_GENERATE = "true"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
