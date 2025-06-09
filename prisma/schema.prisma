@@ -1,0 +1,75 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  Id             Int             @id @default(autoincrement())
+  Email          String          @unique
+  Username       String?
+  Password       String?
+  Balance        String?
+  Bio            String?
+  ProfileImage   String?
+  createdAt      DateTime        @default(now())
+  auctions       Auction[]
+  subscribers    Subscription[]  @relation("Subscribers")
+  subscriptions  Subscription[]  @relation("Subscriptions")
+  messages       Message[]
+  //wonAuctions added
+   wonAuctions    Auction[]       @relation("Winner")
+  notifications  Notification[]
+}
+
+model Subscription {
+  id              Int  @id @default(autoincrement())
+  subscriberId    Int
+  subscribedToId  Int
+  subscriber      User @relation("Subscriptions", fields: [subscriberId], references: [Id])
+  subscribedTo    User @relation("Subscribers", fields: [subscribedToId], references: [Id])
+
+  @@unique([subscriberId, subscribedToId])
+}
+
+model Auction {
+  id           Int       @id @default(autoincrement())
+  image        String
+  description  String
+  initialPrice Float
+  dateListed   DateTime  @default(now())
+  auctionEnd   DateTime?
+  status       String
+  user         User      @relation(fields: [userId], references: [Id])
+  userId       Int
+  category     String   @default("others")  
+  messages     Message[]
+  isDeleted    Boolean   @default(false)
+   delivered    Boolean   @default(false)  /// new flag for order delivery
+  //winner and winner id added
+   winner       User?     @relation("Winner", fields: [winnerId], references: [Id])
+  winnerId     Int?
+  winnedprice Int @default(0)
+}
+
+model Message {
+  id        Int      @id @default(autoincrement())
+  content   String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [Id])
+  userId    Int
+  auction   Auction  @relation(fields: [auctionId], references: [id])
+  auctionId Int
+}
+model Notification {
+  id         Int      @id @default(autoincrement())
+  user       User     @relation(fields: [userId], references: [Id])
+  userId     Int
+  type       String
+  message    String
+  createdAt  DateTime @default(now())
+  isRead     Boolean  @default(false)
+}
