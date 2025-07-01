@@ -46,14 +46,23 @@ export default function Home() {
   ];
 
   async function uploadImage(base64Image: string) {
-    // Placeholder for real image upload
     return base64Image;
+  }
+
+  async function uploadImages(base64Images: string[]) {
+    return base64Images;
   }
 
   const onSubmit = async (data: any) => {
     try {
       const token = localStorage.getItem('token');
-      const imageUrl = await uploadImage(data.image);
+
+      let imageUrls: string[] = [];
+      if (Array.isArray(data.images)) {
+        imageUrls = await uploadImages(data.images);
+      } else if (typeof data.images === 'string') {
+        imageUrls = [await uploadImage(data.images)];
+      }
 
       const response = await fetch('/api/auctions', {
         method: 'POST',
@@ -63,7 +72,7 @@ export default function Home() {
         },
         body: JSON.stringify({
           ...data,
-          image: imageUrl,
+          image: imageUrls,
           initialPrice: parseFloat(data.initialPrice),
           auctionEnd: data.auctionEnd,
           isClosed: data.isClosed === 'true',
@@ -81,7 +90,6 @@ export default function Home() {
     }
   };
 
-  // 1) Check auth
   useEffect(() => {
     const checkAuth = () => {
       const token = localStorage.getItem('token');
@@ -98,7 +106,6 @@ export default function Home() {
     checkAuth();
   }, [router]);
 
-  // 2) Fetch auctions with loading flag
   useEffect(() => {
     const fetchAuctions = async () => {
       setLoading(true);
@@ -136,7 +143,6 @@ export default function Home() {
 
   const currentTime = new Date();
 
-  // Apply combined filters and sorting:
   const filteredAuctions = auctions
     .filter((auction) => {
       const hasValidEndTime =
@@ -189,11 +195,63 @@ export default function Home() {
     router.push(`/Edit/${id}`);
   };
 
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+
+  const handleMultipleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files) return;
+
+    const filesArray = Array.from(e.target.files);
+    setSelectedFiles(filesArray);
+
+    Promise.all(
+      filesArray.map(
+        (file) =>
+          new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+              if (typeof reader.result === 'string') resolve(reader.result);
+              else reject('FileReader result is not string');
+            };
+            reader.onerror = () => reject('Error reading file');
+            reader.readAsDataURL(file);
+          })
+      )
+    )
+      .then((base64Images) => {
+        setValue('images', base64Images, { shouldValidate: true });
+      })
+      .catch(() => {
+        setErrorMessage('Error processing images');
+      });
+  };
+
+  // New: Track current carousel index per auction
+  const [carouselIndexes, setCarouselIndexes] = useState<Record<number, number>>({});
+
+  const prevImage = (auctionId: number, imagesLength: number) => {
+    setCarouselIndexes((prev) => {
+      const currentIndex = prev[auctionId] ?? 0;
+      return {
+        ...prev,
+        [auctionId]: currentIndex === 0 ? imagesLength - 1 : currentIndex - 1,
+      };
+    });
+  };
+
+  const nextImage = (auctionId: number, imagesLength: number) => {
+    setCarouselIndexes((prev) => {
+      const currentIndex = prev[auctionId] ?? 0;
+      return {
+        ...prev,
+        [auctionId]: currentIndex === imagesLength - 1 ? 0 : currentIndex + 1,
+      };
+    });
+  };
+
   return (
     <div className="max-w-5xl mx-auto py-10 px-4">
       <h1 className="text-3xl font-bold mb-6">Auction Listings</h1>
 
-      {/* Search + Filter Toggle + Add Auction Button */}
       <div className="flex items-center mb-4 gap-2">
         <input
           type="text"
@@ -216,7 +274,6 @@ export default function Home() {
         </button>
       </div>
 
-      {/* Conditionally Render Filters */}
       {showFilters && (
         <>
           <div className="flex space-x-2 overflow-x-auto py-2 mb-4">
@@ -276,7 +333,6 @@ export default function Home() {
         </>
       )}
 
-      {/* Create Auction Modal */}
       <Dialog
         open={isModalOpen}
         onClose={() => setIsModalOpen(false)}
@@ -284,7 +340,6 @@ export default function Home() {
       >
         <div className="fixed inset-0 bg-black/30" aria-hidden="true" />
         <div className="fixed inset-0 flex items-center justify-center p-4 overflow-auto">
-          {/* Reduced max-width from md to sm */}
           <Dialog.Panel className="w-full max-w-sm bg-white rounded-lg p-4">
             <Dialog.Title className="text-lg font-semibold mb-3">
               Create New Auction
@@ -292,33 +347,39 @@ export default function Home() {
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-3 text-black">
               <div>
                 <label className="block text-sm font-medium mb-1">
-                  Choose Image
+                  Choose Images (one or more)
                 </label>
                 <input
                   type="file"
                   accept="image/*"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) {
-                      const reader = new FileReader();
-                      reader.onloadend = () => {
-                        setValue('image', reader.result, {
-                          shouldValidate: true,
-                        });
-                      };
-                      reader.readAsDataURL(file);
-                    }
-                  }}
+                  multiple
+                  onChange={handleMultipleImageChange}
                   className="w-full border rounded-lg px-2 py-1"
                 />
                 <input
                   type="hidden"
-                  {...register('image', { required: 'Image is required' })}
+                  {...register('images', { required: 'At least one image is required' })}
                 />
-                {errors.image && (
+                {errors.images && (
                   <p className="text-red-500 text-xs mt-1">
-                    {errors.image.message}
+                    {errors.images.message}
                   </p>
+                )}
+                {selectedFiles.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {selectedFiles.map((file, idx) => {
+                      const objectUrl = URL.createObjectURL(file);
+                      return (
+                        <img
+                          key={idx}
+                          src={objectUrl}
+                          alt={`preview-${idx}`}
+                          className="h-16 w-16 object-cover rounded"
+                          onLoad={() => URL.revokeObjectURL(objectUrl)}
+                        />
+                      );
+                    })}
+                  </div>
                 )}
               </div>
 
@@ -444,28 +505,67 @@ export default function Home() {
         </div>
       </Dialog>
 
-      {/* Auction Listings */}
       <div className="grid gap-6 sm:grid-cols-2">
         {loading
           ? renderSkeletons(10)
           : filteredAuctions.map((auction) => {
               const isOwner = auction.user?.Id === currentUserId;
+              const images: string[] = Array.isArray(auction.image)
+                ? auction.image
+                : auction.image
+                ? [auction.image]
+                : [];
+
+              // Get current index from state or default to 0
+              const currentIndex = carouselIndexes[auction.id] ?? 0;
+
               return (
                 <div
                   key={auction.id}
                   className="bg-white rounded-lg shadow-md overflow-hidden border border-gray-200"
                 >
-                  <Image
-                    src={auction.image}
-                    alt="Auction item"
-                    width={500}
-                    height={300}
-                    className="w-full h-60 object-cover"
-                  />
+                  {/* Carousel container */}
+                  <div className="relative w-full h-60 bg-gray-100 flex items-center justify-center overflow-hidden rounded">
+                    {images.length > 0 ? (
+                      <>
+                        <Image
+                          src={images[currentIndex]}
+                          alt={`Auction Image ${currentIndex + 1}`}
+                          width={500}
+                          height={300}
+                          className="w-full h-60 object-cover select-none"
+                          unoptimized
+                          priority={false}
+                        />
+                        {/* Left/Prev Button */}
+                        <button
+                          onClick={() => prevImage(auction.id, images.length)}
+                          className="absolute top-1/2 left-2 -translate-y-1/2 bg-black bg-opacity-30 hover:bg-opacity-50 text-white rounded-full p-1"
+                          aria-label="Previous Image"
+                        >
+                          ‹
+                        </button>
+                        {/* Right/Next Button */}
+                        <button
+                          onClick={() => nextImage(auction.id, images.length)}
+                          className="absolute top-1/2 right-2 -translate-y-1/2 bg-black bg-opacity-30 hover:bg-opacity-50 text-white rounded-full p-1"
+                          aria-label="Next Image"
+                        >
+                          ›
+                        </button>
+
+                        {/* Image counter */}
+                        <div className="absolute bottom-1 right-1 bg-black bg-opacity-40 text-white text-xs rounded px-2 py-0.5 select-none">
+                          {currentIndex + 1} / {images.length}
+                        </div>
+                      </>
+                    ) : (
+                      <div className="text-gray-400 italic">No image available</div>
+                    )}
+                  </div>
+
                   <div className="p-4">
-                    <p className="text-gray-700 mb-2">
-                      {auction.description}
-                    </p>
+                    <p className="text-gray-700 mb-2">{auction.description}</p>
                     <div className="text-sm text-gray-500 mb-2">
                       Date Listed:{' '}
                       {new Date(auction.dateListed).toLocaleDateString()}
