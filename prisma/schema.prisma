@@ -10,7 +10,7 @@ datasource db {
 model User {
   Id             Int             @id @default(autoincrement())
   Email          String          @unique
-  Username       String?
+  Username       String?           @unique  
   Password       String?
   Balance        String?
   Bio            String?
@@ -37,7 +37,7 @@ model Subscription {
 
 model Auction {
   id           Int       @id @default(autoincrement())
-  image        String
+   image        String[]  @default([]) 
   description  String
   initialPrice Float
   dateListed   DateTime  @default(now())
