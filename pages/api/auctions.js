@@ -5,6 +5,14 @@ import { verify, TokenExpiredError } from 'jsonwebtoken';
 
 const prisma = new PrismaClient();
 
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: '10mb', // You can increase this further if needed
+    },
+  },
+};
+
 export default async function handler(req, res) {
   const { method } = req;
 
